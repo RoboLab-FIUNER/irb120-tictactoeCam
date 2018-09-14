@@ -17,9 +17,9 @@
 import cv2
 import numpy as np
 import helper as H
-import socket
-#import select
-#import time
+# import socket
+# import select
+# import time
 
 
 class Calib:
@@ -32,6 +32,11 @@ class Calib:
         self.cam_height = None
         self.T1 = np.float32([[1, 0, -4], [0, 1, -3]])
         self.T2 = np.float32([[1, 0, 5], [0, 1, 4]])
+        self.maxT = None
+        self.minT = None
+        self.k_size = None
+        self.d_iter = None
+        self.e_iter = None
         self.roi = None
 
     # Jetson onboard camera
@@ -78,36 +83,41 @@ class Calib:
                 break
         cv2.destroyAllWindows()
 
-
     def get_roi(self):
         while True:
-            maxT = cv2.getTrackbarPos('max_canny', self.win_names[1])
-            minT = cv2.getTrackbarPos('min_canny', self.win_names[1])
-            k_size = cv2.getTrackbarPos('kernel_size', self.win_names[2])
-            d_iter = cv2.getTrackbarPos('dilate_iter', self.win_names[2])
-            e_iter = cv2.getTrackbarPos('erode_iter', self.win_names[2])
+            self.maxT = cv2.getTrackbarPos('max_canny', self.win_names[1])
+            self.minT = cv2.getTrackbarPos('min_canny', self.win_names[1])
+            self.k_size = cv2.getTrackbarPos('kernel_size', self.win_names[2])
+            self.d_iter = cv2.getTrackbarPos('dilate_iter', self.win_names[2])
+            self.e_iter = cv2.getTrackbarPos('erode_iter', self.win_names[2])
 
             ret, frame = self.camera.read()
+
             if not ret:
                 continue
+
             raw_frame = frame.copy()
             src_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             src_gray = cv2.blur(src_gray, (3, 3))
-            canny_output = cv2.Canny(src_gray, minT, maxT)
+            canny_output = cv2.Canny(src_gray, self.minT, self.maxT)
+
             if k_size == 0:
                 wrapped = canny_output
             else:
-                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_size,k_size))
-                dilation = cv2.dilate(canny_output, kernel, iterations=d_iter)
-                closed = cv2.morphologyEx(dilation, cv2.MORPH_CLOSE, kernel)
-                erode = cv2.erode(closed, kernel, iterations=e_iter)
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.k_size, self.k_size))
+                dilation = cv2.dilate(canny_output, self.kernel, iterations=self.d_iter)
+                closed = cv2.morphologyEx(dilation, cv2.MORPH_CLOSE, self.kernel)
+                erode = cv2.erode(closed, kernel, iterations=self.e_iter)
                 wrapped = cv2.warpAffine(erode, self.T1, (self.cam_width, self.cam_height))
+
             board = H.findBiggestContour(wrapped)
+
             if board is False:
                 cv2.imshow(self.win_names[1], frame)
                 if cv2.waitKey(5) & 0xFF == ord('q'):
-                     break
+                    break
                 continue
+
             cv2.drawContours(frame, board, -1, (0, 0, 255), 1)
             rect = cv2.boundingRect(board[0])
             x, y, w, h = H.wrap_digit(rect, 5, False)
